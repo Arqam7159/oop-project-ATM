@@ -8,14 +8,12 @@
 
 class Transaction {
 protected:
-    std::string transactionID;//Records the no of transactions
-    std::string accountNumber;//Accoun number for which the transaction is done
-    double amount;//How much the transaction is for
-    std::string timestamp;//Takes the date and time from the system
+    std::string transactionID;
+    std::string accountNumber;
+    double amount;
+    std::string timestamp;
 
-    std::string getCurrentTimestamp() 
-    {
-        //Gets the current time from the system
+    std::string getCurrentTimestamp() {
         time_t now = time(0);
         char buf[80];
         strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", localtime(&now));
@@ -23,15 +21,14 @@ protected:
     }
 
 public:
-//Constructor for our transaction
     Transaction(const std::string& transID, const std::string& accNum, double amt)
         : transactionID(transID), accountNumber(accNum), amount(amt) {
         timestamp = getCurrentTimestamp();
     }
-//Destructor for transaction
+
     virtual ~Transaction() = default;
 
-
+    // Pure virtual function for polymorphism
     virtual std::string printReceipt() const = 0;
     virtual std::string getType() const = 0;
     
