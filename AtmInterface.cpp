@@ -1,4 +1,4 @@
-#include "ATMInterface.h"
+#include "AtmInterface.h"
 #include <sstream>
 #include <iomanip>
 #include <iostream>
@@ -40,7 +40,7 @@ ATMInterface::ATMInterface()
       adminActionMode(ADMIN_ACTION_NONE),
       previousMenuState(STATE_MAIN_MENU) {
     
-    if (!mainFont.loadFromFile("arial.ttf")) {
+    if (!mainFont.loadFromFile("assets/fonts/arialn.ttf")) {
         cerr << "Error loading font!" << endl;
     }
     

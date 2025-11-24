@@ -1,4 +1,4 @@
-#include "ATMInterface.h"
+#include "AtmInterface.h"
 #include <iostream>
 
 int main() {
