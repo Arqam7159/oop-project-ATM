@@ -66,11 +66,34 @@ void ATMInterface::setupUI() {
     titleText.setFillColor(sf::Color::Cyan);
     titleText.setString("ATM Simulator");
     titleText.setPosition(300, 70);
+
+    // --- Insert-card visuals setup ---
+    slot_.setSize(sf::Vector2f(260.f, 12.f));
+    slot_.setFillColor(sf::Color(60, 60, 80));
+    slot_.setOutlineThickness(2.f);
+    slot_.setOutlineColor(sf::Color(120, 120, 160));
+    slot_.setPosition(320.f, 140.f);
+
+    // Card starts off-screen and slides up into the slot
+    card_.setSize(sf::Vector2f(120.f, 80.f));
+    card_.setFillColor(sf::Color(200, 200, 240));
+    card_.setOutlineThickness(2.f);
+    card_.setOutlineColor(sf::Color(150, 150, 200));
+    cardYStart_ = 650.f; // below the window
+    cardYEnd_   = slot_.getPosition().y + 2.f;
+    card_.setPosition(slot_.getPosition().x + 70.f, cardYStart_);
+    cardAnimating_ = false;
+    animClock_.restart();
 }
 
 void ATMInterface::run() {
+    sf::Clock frameClock;
     while (window.isOpen()) {
+        float dt = frameClock.restart().asSeconds();
         handleEvents();
+        if (currentState == STATE_INSERT_CARD) {
+            updateInsertCard(dt);
+        }
         render();
     }
 }
@@ -218,6 +241,9 @@ void ATMInterface::render() {
     switch (currentState) {
         case STATE_WELCOME:
             drawWelcomeScreen();
+            break;
+        case STATE_INSERT_CARD:
+            drawInsertCardScreen();
             break;
         case STATE_CARD_INPUT:
             drawCardInputScreen();
@@ -560,7 +586,7 @@ void ATMInterface::drawWelcomeScreen() {
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         cardNumberInput.clear();
-        setScreen(STATE_CARD_INPUT);
+        setScreen(STATE_INSERT_CARD);
     });
     
     screenButtons.emplace_back("Admin Login", mainFont, sf::Vector2f(200, 50), sf::Vector2f(500, 320));
@@ -1701,6 +1727,54 @@ void ATMInterface::processPinChange() {
     newPinInput.clear();
     previousMenuState = STATE_MAIN_MENU;
     setScreen(STATE_TRANSACTION_COMPLETE);
+}
+
+
+//! TRYING: ANIMATION
+void ATMInterface::drawInsertCardScreen() {
+    screenButtons.clear();
+
+    // Instruction text
+    sf::Text info;
+    info.setFont(mainFont);
+    info.setCharacterSize(22);
+    info.setFillColor(sf::Color::White);
+    info.setString("Inserting card...");
+    info.setPosition(320.f, 180.f);
+    window.draw(info);
+
+    // Draw slot and moving card
+    window.draw(slot_);
+    window.draw(card_);
+
+    // Allow skipping the animation
+    screenButtons.emplace_back("Skip", mainFont, sf::Vector2f(140.f, 45.f), sf::Vector2f(380.f, 440.f));
+    screenButtons.back().setAction([this]() {
+        cardAnimating_ = false;
+        setScreen(STATE_CARD_INPUT);
+    });
+}
+
+void ATMInterface::updateInsertCard(float dt) {
+    (void)dt; // dt reserved for future easing; animation uses clock for simplicity
+    if (!cardAnimating_) {
+        cardAnimating_ = true;
+        animClock_.restart();
+        // Ensure starting position is off-screen each time we enter this state
+        card_.setPosition(slot_.getPosition().x + 70.f, cardYStart_);
+    }
+
+    float t = animClock_.getElapsedTime().asSeconds() / 1.0f; // 1 second animation
+    if (t > 1.f) t = 1.f;
+
+    float y = cardYStart_ + (cardYEnd_ - cardYStart_) * t;
+    sf::Vector2f pos = card_.getPosition();
+    card_.setPosition(pos.x, y);
+
+    if (t >= 1.f) {
+        cardAnimating_ = false;
+        setScreen(STATE_CARD_INPUT);
+    }
 }
 
 void ATMInterface::setScreen(ScreenState newState) {

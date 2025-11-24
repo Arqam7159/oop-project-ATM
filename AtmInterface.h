@@ -18,6 +18,7 @@
 
 enum ScreenState {
     STATE_WELCOME,
+    STATE_INSERT_CARD,            //! TESTING: insert-card animation state
     STATE_CARD_INPUT,
     STATE_CHECK_ACCOUNT,
     STATE_ENTER_NAME,
@@ -47,6 +48,14 @@ enum ScreenState {
 
 class ATMInterface {
 private:
+    //! Visual elements for future insert-card animation
+    sf::RectangleShape slot_;     //? the ATM slot
+    sf::RectangleShape card_;     //? the card
+    bool  cardAnimating_ = false;
+    float cardYStart_    = 0.f;
+    float cardYEnd_      = 0.f;
+    sf::Clock animClock_;
+
     sf::RenderWindow window;
     Bank bank;
     ATM atmMachine;
@@ -55,7 +64,7 @@ private:
     std::shared_ptr<Account> currentAccount;
     std::unique_ptr<Card> currentCard;
     
-    ScreenState currentState;
+    ScreenState currentState{ STATE_WELCOME };   // start on Welcome
     std::string currentInput;
     std::string cardNumberInput;
     std::string nameInput;
@@ -94,6 +103,7 @@ private:
     
     // Screen drawing functions
     void drawWelcomeScreen();
+    void drawInsertCardScreen();                 // NEW: add draw for insert-card state
     void drawCardInputScreen();
     void drawCheckAccountScreen();
     void drawEnterNameScreen();
@@ -130,6 +140,7 @@ private:
     void processPinChange();
     
     // Helper functions
+    void updateInsertCard(float dt);             // NEW: update for insert-card animation
     void setScreen(ScreenState newState);
     void logout();
     void startAdminAccountAction(AdminActionMode mode);
@@ -140,4 +151,4 @@ public:
     void run();
 };
 
-#endif // ATMINTERFACE_H
+#endif 
