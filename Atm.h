@@ -12,7 +12,7 @@ private:
     int transactionCounter;
 
 public:
-    ATM(Bank& bankRef) : bank(bankRef), cashAvailable(10000.0), transactionCounter(0) {}
+    ATM(Bank& bankRef) : bank(bankRef), cashAvailable(1000000.0), transactionCounter(0) {}
 
     void refillCash(double amount) {
         if (amount > 0) {

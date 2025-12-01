@@ -58,7 +58,7 @@ ATMInterface::ATMInterface()
         );
     }
     
-    atmMachine.refillCash(10000.0);
+    atmMachine.refillCash(500000.0); // ensure ample cash to avoid dispense failures
     setupUI();
 }
 
@@ -131,6 +131,7 @@ void ATMInterface::handleEvents() {
         
         if (event.type == sf::Event::MouseButtonPressed) {
             if (event.mouseButton.button == sf::Mouse::Left) {
+                window.requestFocus();
                 sf::Vector2f mousePos = window.mapPixelToCoords(
                     sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
                 handleMouseClick(mousePos);
@@ -242,14 +243,17 @@ void ATMInterface::handleTextInput(sf::Uint32 unicode) {
             processPinChange();
         }
     } else if (unicode >= 48 && unicode <= 57) { // Numbers 0-9
+        bool isPinState = (currentState == STATE_ENTER_PIN || currentState == STATE_LOGIN || 
+                           currentState == STATE_CHANGE_PIN_CURRENT || currentState == STATE_CHANGE_PIN_NEW ||
+                           currentState == STATE_CHANGE_PIN_CONFIRM);
+        bool isAmountState = (currentState == STATE_WITHDRAW || currentState == STATE_DEPOSIT ||
+                              currentState == STATE_TRANSFER || currentState == STATE_TRANSFER_AMOUNT);
+
         if (currentState == STATE_CARD_INPUT && currentInput.length() < 7) {
             currentInput += static_cast<char>(unicode);
-        } else if ((currentState == STATE_ENTER_PIN || currentState == STATE_LOGIN || 
-                    currentState == STATE_WITHDRAW || currentState == STATE_DEPOSIT ||
-                    currentState == STATE_TRANSFER || currentState == STATE_TRANSFER_AMOUNT ||
-                    currentState == STATE_CHANGE_PIN_CURRENT || currentState == STATE_CHANGE_PIN_NEW ||
-                    currentState == STATE_CHANGE_PIN_CONFIRM) && 
-                   currentInput.length() < 30) {
+        } else if (isPinState && currentInput.length() < 4) {
+            currentInput += static_cast<char>(unicode);
+        } else if (isAmountState && currentInput.length() < 30) {
             currentInput += static_cast<char>(unicode);
         }
     } else if ((unicode >= 65 && unicode <= 90) || (unicode >= 97 && unicode <= 122) || unicode == 32) { // Letters and space
@@ -277,7 +281,9 @@ void ATMInterface::render() {
     uiView.reset(sf::FloatRect(-uiOffset.x, -uiOffset.y, defaultView.getSize().x, defaultView.getSize().y));
     window.setView(uiView);
 
-    window.draw(titleText);
+    if (currentState == STATE_WELCOME) {
+        window.draw(titleText);
+    }
     
     switch (currentState) {
         case STATE_WELCOME:
@@ -394,8 +400,8 @@ void ATMInterface::checkCardNumber() {
 }
 
 void ATMInterface::createNewAccount() {
-    if (currentInput.length() < 4) {
-        transactionMessage = "PIN must be at least 4 digits!";
+    if (currentInput.length() != 4) {
+        transactionMessage = "PIN must be exactly 4 digits!";
         currentInput.clear();
         return;
     }
@@ -414,6 +420,11 @@ void ATMInterface::createNewAccount() {
 
 void ATMInterface::enterPIN(const string& pin) {
     if (currentCard) {
+        if (pin.length() != 4) {
+            transactionMessage = "PIN must be exactly 4 digits.";
+            currentInput.clear();
+            return;
+        }
         if (bank.isAccountLocked(currentCard->getAccountNumber())) {
             transactionMessage = "This card is locked.\nPlease contact an administrator to unlock it.";
             currentInput.clear();
@@ -655,10 +666,10 @@ void ATMInterface::drawCardInputScreen() {
     inputText.setPosition(350, 250);
     window.draw(inputText);
     
-    screenButtons.emplace_back("Continue", mainFont, sf::Vector2f(180, 50), sf::Vector2f(200, 370));
+    screenButtons.emplace_back("Continue", mainFont, sf::Vector2f(200, 50), sf::Vector2f(200, 370));
     screenButtons.back().setAction([this]() { checkCardNumber(); });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 370));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(200, 50), sf::Vector2f(440, 370));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         setScreen(STATE_WELCOME);
@@ -683,7 +694,7 @@ void ATMInterface::drawCheckAccountScreen() {
         setScreen(STATE_ENTER_NAME);
     });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(200, 50), sf::Vector2f(520, 340));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(200, 50), sf::Vector2f(440, 340));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         cardNumberInput.clear();
@@ -718,7 +729,7 @@ void ATMInterface::drawEnterNameScreen() {
         }
     });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 370));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 370));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         setScreen(STATE_WELCOME);
@@ -732,7 +743,7 @@ void ATMInterface::drawSelectAccountTypeScreen() {
     displayText.setCharacterSize(24);
     displayText.setFillColor(sf::Color::White);
     displayText.setString("Select Account Type:");
-    displayText.setPosition(280, 180);
+    displayText.setPosition(240, 180);
     window.draw(displayText);
     
     // Show selected type
@@ -746,24 +757,24 @@ void ATMInterface::drawSelectAccountTypeScreen() {
         window.draw(selectedText);
     }
     
-    screenButtons.emplace_back("Savings Account", mainFont, sf::Vector2f(200, 50), sf::Vector2f(150, 310));
+    screenButtons.emplace_back("Savings Account", mainFont, sf::Vector2f(200, 50), sf::Vector2f(200, 310));
     screenButtons.back().setAction([this]() { 
         accountTypeInput = "Savings";
     });
     
-    screenButtons.emplace_back("Checking Account", mainFont, sf::Vector2f(200, 50), sf::Vector2f(500, 310));
+    screenButtons.emplace_back("Checking Account", mainFont, sf::Vector2f(200, 50), sf::Vector2f(430, 310));
     screenButtons.back().setAction([this]() { 
         accountTypeInput = "Checking";
     });
     
-    screenButtons.emplace_back("Proceed", mainFont, sf::Vector2f(180, 50), sf::Vector2f(200, 420));
+    screenButtons.emplace_back("Proceed", mainFont, sf::Vector2f(180, 50), sf::Vector2f(240, 420));
     screenButtons.back().setAction([this]() { 
         if (!accountTypeInput.empty()) {
             setScreen(STATE_CONFIRM_ACCOUNT);
         }
     });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 420));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 420));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         accountTypeInput.clear();
@@ -784,7 +795,7 @@ void ATMInterface::drawConfirmAccountScreen() {
     ss << "Account Type: " << accountTypeInput << "\n\n";
     ss << "Are you sure you want to create this account?";
     displayText.setString(ss.str());
-    displayText.setPosition(120, 160);
+    displayText.setPosition(160, 160);
     window.draw(displayText);
     
     screenButtons.emplace_back("Yes, Create", mainFont, sf::Vector2f(180, 50), sf::Vector2f(200, 420));
@@ -793,7 +804,7 @@ void ATMInterface::drawConfirmAccountScreen() {
         setScreen(STATE_ENTER_PIN);
     });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 420));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 420));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         accountTypeInput.clear();
@@ -823,7 +834,7 @@ void ATMInterface::drawEnterPinScreen() {
     screenButtons.emplace_back("Create Account", mainFont, sf::Vector2f(180, 50), sf::Vector2f(200, 370));
     screenButtons.back().setAction([this]() { createNewAccount(); });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 370));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 370));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         setScreen(STATE_WELCOME);
@@ -852,7 +863,7 @@ void ATMInterface::drawLoginScreen() {
     screenButtons.emplace_back("Submit", mainFont, sf::Vector2f(180, 50), sf::Vector2f(200, 370));
     screenButtons.back().setAction([this]() { enterPIN(currentInput); });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 370));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 370));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         currentCard.reset();
@@ -878,9 +889,9 @@ void ATMInterface::drawMainMenu() {
     displayText.setPosition(140, 120);
     window.draw(displayText);
     
-    // 3 buttons per row, 2 rows, plus eject at bottom
-    float col1X = 120, col2X = 380, col3X = 640;
-    float row1Y = 230, row2Y = 310, row3Y = 390;
+    // 3 buttons per row, 2 rows, plus eject at bottom (tighter spacing to stay in frame)
+    float col1X = 180, col2X = 360, col3X = 540;
+    float row1Y = 230, row2Y = 300, row3Y = 370;
     float btnWidth = 140, btnHeight = 50;
     
     screenButtons.emplace_back("Check Balance", mainFont, sf::Vector2f(btnWidth, btnHeight), sf::Vector2f(col1X, row1Y));
@@ -970,7 +981,7 @@ void ATMInterface::drawWithdrawScreen() {
     screenButtons.emplace_back("Submit", mainFont, sf::Vector2f(180, 50), sf::Vector2f(200, 390));
     screenButtons.back().setAction([this]() { processWithdrawal(currentInput); });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 390));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 390));
     screenButtons.back().setAction([this]() { setScreen(STATE_MAIN_MENU); });
 }
 
@@ -995,7 +1006,7 @@ void ATMInterface::drawDepositScreen() {
     screenButtons.emplace_back("Submit", mainFont, sf::Vector2f(180, 50), sf::Vector2f(200, 390));
     screenButtons.back().setAction([this]() { processDeposit(currentInput); });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 390));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 390));
     screenButtons.back().setAction([this]() { setScreen(STATE_MAIN_MENU); });
 }
 
@@ -1055,7 +1066,7 @@ void ATMInterface::drawAdminLoginScreen() {
         }
     });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 450));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 450));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         setScreen(STATE_WELCOME);
@@ -1431,7 +1442,7 @@ void ATMInterface::drawTransferScreen() {
         }
     });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 390));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 390));
     screenButtons.back().setAction([this]() { 
         currentInput.clear();
         setScreen(STATE_MAIN_MENU); 
@@ -1468,7 +1479,7 @@ void ATMInterface::drawTransferAmountScreen() {
     screenButtons.emplace_back("Transfer", mainFont, sf::Vector2f(180, 50), sf::Vector2f(200, 390));
     screenButtons.back().setAction([this]() { processTransfer(currentInput); });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 390));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 390));
     screenButtons.back().setAction([this]() { 
         currentInput.clear();
         setScreen(STATE_MAIN_MENU); 
@@ -1616,7 +1627,7 @@ void ATMInterface::drawChangePinCurrentScreen() {
         }
     });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 390));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 390));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         currentPinInput.clear();
@@ -1656,7 +1667,7 @@ void ATMInterface::drawChangePinNewScreen() {
         }
     });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 390));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 390));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         currentPinInput.clear();
@@ -1696,7 +1707,7 @@ void ATMInterface::drawChangePinConfirmScreen() {
         }
     });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(520, 390));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 390));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         currentPinInput.clear();
@@ -1748,9 +1759,9 @@ void ATMInterface::processPinChange() {
         return;
     }
     
-    // Verify new PIN meets minimum length requirement
-    if (newPinInput.length() < 4) {
-        transactionMessage = "New PIN must be at least 4 digits!\nPIN change cancelled.";
+    // Verify new PIN meets exact length requirement
+    if (newPinInput.length() != 4) {
+        transactionMessage = "New PIN must be exactly 4 digits!\nPIN change cancelled.";
         currentInput.clear();
         currentPinInput.clear();
         newPinInput.clear();
