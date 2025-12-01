@@ -1,4 +1,4 @@
-SFML_ROOT ?= $(HOME)/SFML-2.5.0      # your known-good 2.5.0 build
+SFML_ROOT ?= $(HOME)/SFML-2.5.0
 INCDIR     = $(SFML_ROOT)/include
 LIBDIR     = $(SFML_ROOT)/build-x86_64/lib
 
