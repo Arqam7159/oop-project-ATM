@@ -27,7 +27,7 @@ static bool isValidNumber(const string& str) {
 }
 
 ATMInterface::ATMInterface()
-    : window(sf::VideoMode(900, 650), "ATM Simulator - Project Group 40"),
+    : window(sf::VideoMode(900, 650), "ATM Simulator - Project Group 32"),
       bank(),
       atmMachine(bank),
       admin(),
@@ -40,8 +40,22 @@ ATMInterface::ATMInterface()
       adminActionMode(ADMIN_ACTION_NONE),
       previousMenuState(STATE_MAIN_MENU) {
     
+    window.setFramerateLimit(60);
+    window.requestFocus();
+    
     if (!mainFont.loadFromFile("assets/fonts/arialn.ttf")) {
         cerr << "Error loading font!" << endl;
+    }
+
+    frameTextureLoaded = atmFrameTexture.loadFromFile("assets/atm_frame.png");
+    if (frameTextureLoaded) {
+        atmFrameSprite.setTexture(atmFrameTexture);
+        sf::Vector2u texSize = atmFrameTexture.getSize();
+        sf::Vector2u winSize = window.getSize();
+        atmFrameSprite.setScale(
+            static_cast<float>(winSize.x) / static_cast<float>(texSize.x),
+            static_cast<float>(winSize.y) / static_cast<float>(texSize.y)
+        );
     }
     
     atmMachine.refillCash(10000.0);
@@ -49,38 +63,48 @@ ATMInterface::ATMInterface()
 }
 
 void ATMInterface::setupUI() {
+    uiOffset = sf::Vector2f(35.f, 28.f);
+
     atmBody.setSize(sf::Vector2f(850, 600));
     atmBody.setPosition(25, 25);
-    atmBody.setFillColor(sf::Color(30, 30, 50));
+    atmBody.setFillColor(sf::Color(20, 24, 30));
     atmBody.setOutlineThickness(5);
-    atmBody.setOutlineColor(sf::Color(100, 100, 150));
+    atmBody.setOutlineColor(sf::Color(70, 90, 120));
     
-    screen.setSize(sf::Vector2f(800, 550));
-    screen.setPosition(50, 50);
-    screen.setFillColor(sf::Color(20, 20, 40));
+    screenGlow.setSize(sf::Vector2f(700, 440));
+    screenGlow.setPosition(100, 90);
+    screenGlow.setFillColor(sf::Color(0, 0, 0, 0)); // no extra tint by default
+    
+    screen.setSize(sf::Vector2f(680, 420));
+    screen.setPosition(110, 100);
+    screen.setFillColor(sf::Color(12, 16, 24, 238));
     screen.setOutlineThickness(3);
-    screen.setOutlineColor(sf::Color::Cyan);
+    screen.setOutlineColor(sf::Color(90, 130, 180));
+
+    screenGlass.setSize(sf::Vector2f(672, 412));
+    screenGlass.setPosition(114, 104);
+    screenGlass.setFillColor(sf::Color(200, 220, 230, 18));
     
     titleText.setFont(mainFont);
-    titleText.setCharacterSize(36);
-    titleText.setFillColor(sf::Color::Cyan);
+    titleText.setCharacterSize(30);
+    titleText.setFillColor(sf::Color(230, 240, 245));
     titleText.setString("ATM Simulator");
-    titleText.setPosition(300, 70);
+    titleText.setPosition(140, 110);
 
     // --- Insert-card visuals setup ---
     slot_.setSize(sf::Vector2f(260.f, 12.f));
-    slot_.setFillColor(sf::Color(60, 60, 80));
+    slot_.setFillColor(sf::Color(70, 80, 90));
     slot_.setOutlineThickness(2.f);
-    slot_.setOutlineColor(sf::Color(120, 120, 160));
-    slot_.setPosition(320.f, 140.f);
+    slot_.setOutlineColor(sf::Color(150, 170, 190));
+    slot_.setPosition(500.f, 540.f);
 
     // Card starts off-screen and slides up into the slot
     card_.setSize(sf::Vector2f(120.f, 80.f));
-    card_.setFillColor(sf::Color(200, 200, 240));
+    card_.setFillColor(sf::Color(220, 225, 230));
     card_.setOutlineThickness(2.f);
-    card_.setOutlineColor(sf::Color(150, 150, 200));
-    cardYStart_ = 650.f; // below the window
-    cardYEnd_   = slot_.getPosition().y + 2.f;
+    card_.setOutlineColor(sf::Color(160, 170, 185));
+    cardYStart_ = 700.f; // below the window
+    cardYEnd_   = slot_.getPosition().y - 30.f;
     card_.setPosition(slot_.getPosition().x + 70.f, cardYStart_);
     cardAnimating_ = false;
     animClock_.restart();
@@ -107,9 +131,14 @@ void ATMInterface::handleEvents() {
         
         if (event.type == sf::Event::MouseButtonPressed) {
             if (event.mouseButton.button == sf::Mouse::Left) {
-                sf::Vector2f mousePos(event.mouseButton.x, event.mouseButton.y);
+                sf::Vector2f mousePos = window.mapPixelToCoords(
+                    sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
                 handleMouseClick(mousePos);
             }
+        }
+
+        if (event.type == sf::Event::MouseEntered) {
+            window.requestFocus();
         }
         
         if (event.type == sf::Event::TextEntered) {
@@ -124,7 +153,8 @@ void ATMInterface::handleEvents() {
         }
         
         if (event.type == sf::Event::MouseMoved) {
-            sf::Vector2f mousePos(event.mouseMove.x, event.mouseMove.y);
+            sf::Vector2f mousePos = window.mapPixelToCoords(
+                sf::Vector2i(event.mouseMove.x, event.mouseMove.y));
             for (auto& button : screenButtons) {
                 button.update(mousePos);
             }
@@ -232,10 +262,21 @@ void ATMInterface::handleTextInput(sf::Uint32 unicode) {
 }
 
 void ATMInterface::render() {
-    window.clear(sf::Color(10, 10, 20));
-    
-    window.draw(atmBody);
-    window.draw(screen);
+    window.clear(sf::Color::Black);
+
+    sf::View defaultView = window.getDefaultView();
+    window.setView(defaultView);
+
+    if (frameTextureLoaded) {
+        window.draw(atmFrameSprite);
+    } else {
+        window.draw(atmBody);
+    }
+
+    sf::View uiView = defaultView;
+    uiView.reset(sf::FloatRect(-uiOffset.x, -uiOffset.y, defaultView.getSize().x, defaultView.getSize().y));
+    window.setView(uiView);
+
     window.draw(titleText);
     
     switch (currentState) {
@@ -582,14 +623,14 @@ void ATMInterface::drawWelcomeScreen() {
     displayText.setPosition(200, 180);
     window.draw(displayText);
     
-    screenButtons.emplace_back("Insert Card", mainFont, sf::Vector2f(200, 50), sf::Vector2f(200, 320));
+    screenButtons.emplace_back("Insert Card", mainFont, sf::Vector2f(200, 50), sf::Vector2f(140, 360));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         cardNumberInput.clear();
         setScreen(STATE_INSERT_CARD);
     });
     
-    screenButtons.emplace_back("Admin Login", mainFont, sf::Vector2f(200, 50), sf::Vector2f(500, 320));
+    screenButtons.emplace_back("Admin Login", mainFont, sf::Vector2f(200, 50), sf::Vector2f(380, 360));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         setScreen(STATE_ADMIN_LOGIN);
@@ -603,7 +644,7 @@ void ATMInterface::drawCardInputScreen() {
     displayText.setCharacterSize(22);
     displayText.setFillColor(sf::Color::White);
     displayText.setString("Please enter your 7-digit card number:");
-    displayText.setPosition(100, 180);
+    displayText.setPosition(150, 180);
     window.draw(displayText);
     
     sf::Text inputText;
@@ -657,7 +698,7 @@ void ATMInterface::drawEnterNameScreen() {
     displayText.setCharacterSize(22);
     displayText.setFillColor(sf::Color::White);
     displayText.setString("Please enter your full name:");
-    displayText.setPosition(100, 180);
+    displayText.setPosition(150, 180);
     window.draw(displayText);
     
     sf::Text inputText;
@@ -665,7 +706,7 @@ void ATMInterface::drawEnterNameScreen() {
     inputText.setCharacterSize(24);
     inputText.setFillColor(sf::Color::Yellow);
     inputText.setString(currentInput);
-    inputText.setPosition(100, 250);
+    inputText.setPosition(150, 250);
     window.draw(inputText);
     
     screenButtons.emplace_back("Continue", mainFont, sf::Vector2f(180, 50), sf::Vector2f(200, 370));
@@ -767,7 +808,7 @@ void ATMInterface::drawEnterPinScreen() {
     displayText.setCharacterSize(22);
     displayText.setFillColor(sf::Color::White);
     displayText.setString("Create your PIN (min 4 digits):");
-    displayText.setPosition(100, 180);
+    displayText.setPosition(150, 180);
     window.draw(displayText);
     
     sf::Text inputText;
@@ -796,7 +837,7 @@ void ATMInterface::drawLoginScreen() {
     displayText.setCharacterSize(24);
     displayText.setFillColor(sf::Color::White);
     displayText.setString("Please enter your PIN:");
-    displayText.setPosition(100, 180);
+    displayText.setPosition(150, 180);
     window.draw(displayText);
     
     sf::Text inputText;
@@ -834,7 +875,7 @@ void ATMInterface::drawMainMenu() {
     ss << "Account: " << currentAccount->getAccountNumber() << " | ";
     ss << currentAccount->displayAccountType();
     displayText.setString(ss.str());
-    displayText.setPosition(90, 120);
+    displayText.setPosition(140, 120);
     window.draw(displayText);
     
     // 3 buttons per row, 2 rows, plus eject at bottom
@@ -965,7 +1006,7 @@ void ATMInterface::drawTransactionScreen(const string& message) {
     displayText.setCharacterSize(14);
     displayText.setFillColor(sf::Color::White);
     displayText.setString(message);
-    displayText.setPosition(70, 120);
+    displayText.setPosition(130, 120);
     window.draw(displayText);
     
     // Determine button text and destination based on previous menu
@@ -991,7 +1032,7 @@ void ATMInterface::drawAdminLoginScreen() {
     displayText.setCharacterSize(22);
     displayText.setFillColor(sf::Color::White);
     displayText.setString("Admin Login\n\nUsername: admin\nPassword: admin\n\nEnter password:");
-    displayText.setPosition(100, 150);
+    displayText.setPosition(150, 150);
     window.draw(displayText);
     
     sf::Text inputText;
@@ -1115,7 +1156,7 @@ void ATMInterface::drawAdminViewAccounts() {
             ss << (bank.isAccountLocked(accPtr->getAccountNumber()) ? "Status: LOCKED" : "Status: Active");
             
             accText.setString(ss.str());
-            accText.setPosition(80, yPos);
+            accText.setPosition(140, yPos);
             window.draw(accText);
         }
         yPos += 40;
@@ -1235,13 +1276,13 @@ void ATMInterface::drawViewTransactionsScreen() {
             displayText.setCharacterSize(15);
             displayText.setFillColor(sf::Color::Green);
             displayText.setString(ss.str());
-            displayText.setPosition(100, yPos);
+            displayText.setPosition(140, yPos);
             window.draw(displayText);
             
             displayText.setCharacterSize(13);
             displayText.setFillColor(sf::Color::Cyan);
             displayText.setString(trans.timestamp);
-            displayText.setPosition(100, yPos + 20);
+            displayText.setPosition(140, yPos + 20);
             window.draw(displayText);
             
             yPos += 65;
@@ -1303,13 +1344,13 @@ void ATMInterface::drawAdminViewAllTransactionsScreen() {
             displayText.setCharacterSize(14);
             displayText.setFillColor(sf::Color::White);
             displayText.setString(ss.str());
-            displayText.setPosition(90, yPos);
+            displayText.setPosition(140, yPos);
             window.draw(displayText);
             
             displayText.setCharacterSize(12);
             displayText.setFillColor(sf::Color::Cyan);
             displayText.setString(trans.timestamp);
-            displayText.setPosition(90, yPos + 20);
+            displayText.setPosition(140, yPos + 20);
             window.draw(displayText);
             
             yPos += 65;
@@ -1503,7 +1544,7 @@ void ATMInterface::drawViewLockedCardsScreen() {
                              " | Name: " + bank.getAccountName(lockedAccounts[i]->getAccountNumber()) +
                              " | Failed Attempts: " + to_string(lockedAccounts[i]->getFailedLoginAttempts());
             displayText.setString(info);
-            displayText.setPosition(50, yPos);
+            displayText.setPosition(140, yPos);
             window.draw(displayText);
             
             // Add unlock button for this card
@@ -1743,9 +1784,10 @@ void ATMInterface::drawInsertCardScreen() {
     info.setPosition(320.f, 180.f);
     window.draw(info);
 
-    // Draw slot and moving card
-    window.draw(slot_);
-    window.draw(card_);
+    // Draw only the moving card (slot hidden for cleaner look)
+    sf::RenderStates cardStates;
+    cardStates.transform.translate(-uiOffset);
+    window.draw(card_, cardStates);
 
     // Allow skipping the animation
     screenButtons.emplace_back("Skip", mainFont, sf::Vector2f(140.f, 45.f), sf::Vector2f(380.f, 440.f));

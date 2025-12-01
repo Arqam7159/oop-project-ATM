@@ -76,6 +76,12 @@ private:
     sf::Text displayText;
     sf::RectangleShape atmBody;
     sf::RectangleShape screen;
+    sf::RectangleShape screenGlow;
+    sf::RectangleShape screenGlass;
+    sf::Texture atmFrameTexture;
+    sf::Sprite atmFrameSprite;
+    bool frameTextureLoaded{ false };
+    sf::Vector2f uiOffset;
     
     std::vector<Button> screenButtons;
     int scrollOffset;

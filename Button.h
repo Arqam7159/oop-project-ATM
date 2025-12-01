@@ -33,8 +33,8 @@ public:
         // Center text in button
         sf::FloatRect textBounds = text.getLocalBounds();
         text.setPosition(
-            position.x + (size.x - textBounds.width) / 2 - textBounds.left,
-            position.y + (size.y - textBounds.height) / 2 - textBounds.top
+            position.x + (size.x - textBounds.width) * 0.5f - textBounds.left,
+            position.y + (size.y - textBounds.height) * 0.5f - textBounds.top
         );
         
         isHovered = false;
