@@ -21,21 +21,6 @@ public:
     }
     
 
-    std::string generateReport(const Bank& bank) const {
-        std::stringstream report;
-        report << "\n========== BANK REPORT ==========\n";
-        report << "Total Accounts: " << bank.getAllAccounts().size() << "\n\n";
-        
-        for (auto const& [key, accPtr] : bank.getAllAccounts()) {
-            report << "Account: " << accPtr->getAccountNumber() << "\n";
-            report << "Type: " << accPtr->displayAccountType() << "\n";
-            report << "Balance: $" << std::fixed << std::setprecision(2) << accPtr->getBalance() << "\n";
-            report << "---------------------------------\n";
-        }
-        report << "=================================\n";
-        return report.str();
-    }
-
     void addInterest(Bank& bank, double rate) {
         for (auto const& [key, accPtr] : bank.getAllAccounts()) {
             if (accPtr->displayAccountType() == "Savings Account") {
@@ -55,6 +40,8 @@ public:
     bool unlockCard(Bank& bank, const std::string& accountNumber) {
         return bank.setAccountLock(accountNumber, false);
     }
+
+    // Placeholder for future admin-specific approval logic if needed
 };
 
 #endif // ADMIN_H

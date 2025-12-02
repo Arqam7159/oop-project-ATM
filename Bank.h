@@ -3,19 +3,31 @@
 
 #include <string>
 #include <map>
+#include <algorithm>
 #include <memory>
 #include <fstream>
 #include <sstream>
+#include <vector>
 #include "Account.h"
 #include "SavingsAccount.h"
 #include "CheckingAccount.h"
 
 class Bank {
+public:
+    struct PendingDeposit {
+        std::string id;
+        std::string accountNumber;
+        double amount;
+        std::string timestamp;
+    };
+
 private:
     std::map<std::string, std::shared_ptr<Account>> accounts;
     std::map<std::string, std::string> accountNames; 
-    std::map<std::string, bool> accountLocks;
     const std::string dataFile = "bank_accounts.dat";
+    const std::string pendingFile = "pending_deposits.dat";
+    std::vector<PendingDeposit> pendingDeposits;
+    int pendingCounter{0};
 
     void saveToFile() {
         std::ofstream file(dataFile);
@@ -30,6 +42,16 @@ private:
                      << name << ","
                      << (isLocked ? "1" : "0") << ","
                      << accPtr->getFailedLoginAttempts() << "\n";
+            }
+            file.close();
+        }
+    }
+
+    void savePendingDeposits() {
+        std::ofstream file(pendingFile);
+        if (file.is_open()) {
+            for (auto const& pd : pendingDeposits) {
+                file << pd.id << "," << pd.accountNumber << "," << pd.amount << "," << pd.timestamp << "\n";
             }
             file.close();
         }
@@ -62,8 +84,6 @@ private:
                 accountNames[accNum] = name.empty() ? "Unknown" : name;
                 
                 bool isLocked = (lockedStr == "1");
-                accountLocks[accNum] = isLocked;
-                
                 // Load failed attempts if present (for backward compatibility, default to 0)
                 int attempts = attemptsStr.empty() ? 0 : std::stoi(attemptsStr);
                 accounts[accNum]->setLockedStatus(isLocked, attempts);
@@ -72,9 +92,42 @@ private:
         }
     }
 
+    void loadPendingDeposits() {
+        std::ifstream file(pendingFile);
+        if (!file.is_open()) return;
+
+        std::string line;
+        while (std::getline(file, line)) {
+            std::stringstream ss(line);
+            PendingDeposit pd;
+            std::string amountStr;
+            std::getline(ss, pd.id, ',');
+            std::getline(ss, pd.accountNumber, ',');
+            std::getline(ss, amountStr, ',');
+            std::getline(ss, pd.timestamp);
+            if (!pd.id.empty() && !pd.accountNumber.empty() && !amountStr.empty()) {
+                pd.amount = std::stod(amountStr);
+                pendingDeposits.push_back(pd);
+                // track counter based on numeric part if present
+                if (pd.id.size() > 2) {
+                    try {
+                        int num = std::stoi(pd.id.substr(2));
+                        pendingCounter = std::max(pendingCounter, num);
+                    } catch (...) {}
+                }
+            }
+        }
+        file.close();
+    }
+
+    std::string nextPendingId() {
+        return "PD" + std::to_string(++pendingCounter);
+    }
+
 public:
     Bank() {
         loadFromFile();
+        loadPendingDeposits();
     }
 
     bool createAccount(const std::string& cardNumber, const std::string& pin, const std::string& accountType, const std::string& holderName, double initialBalance = 0.0) {
@@ -89,16 +142,12 @@ public:
         }
         
         accountNames[cardNumber] = holderName;
-        accountLocks[cardNumber] = false;
         saveToFile();
         return true;
     }
 
     void addAccount(std::shared_ptr<Account> account) {
         accounts[account->getAccountNumber()] = account;
-        if (!accountLocks.count(account->getAccountNumber())) {
-            accountLocks[account->getAccountNumber()] = false;
-        }
         saveToFile();
     }
 
@@ -158,8 +207,6 @@ bool setAccountLock(const std::string& accountNumber, bool locked) {
         account->unlockCard(); 
     }
     
-    accountLocks[accountNumber] = locked;
-    
     updateAccountData(); 
     
     return true;
@@ -167,6 +214,33 @@ bool setAccountLock(const std::string& accountNumber, bool locked) {
 
     void updateAccountData() {
         saveToFile();
+    }
+
+    const std::vector<PendingDeposit>& getPendingDeposits() const {
+        return pendingDeposits;
+    }
+
+    std::string addPendingDeposit(const std::string& accountNumber, double amount, const std::string& timestamp) {
+        PendingDeposit pd;
+        pd.id = nextPendingId();
+        pd.accountNumber = accountNumber;
+        pd.amount = amount;
+        pd.timestamp = timestamp;
+        pendingDeposits.push_back(pd);
+        savePendingDeposits();
+        return pd.id;
+    }
+
+    bool takePendingDeposit(const std::string& id, PendingDeposit& out) {
+        for (auto it = pendingDeposits.begin(); it != pendingDeposits.end(); ++it) {
+            if (it->id == id) {
+                out = *it;
+                pendingDeposits.erase(it);
+                savePendingDeposits();
+                return true;
+            }
+        }
+        return false;
     }
 };
 

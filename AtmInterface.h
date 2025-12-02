@@ -37,6 +37,8 @@ enum ScreenState {
     STATE_ADMIN_VIEW_ACCOUNTS,
     STATE_ADMIN_SELECT_ACCOUNT,
     STATE_ADMIN_VIEW_LOCKED_CARDS,
+    STATE_ADMIN_PENDING_DEPOSITS,
+    STATE_ADMIN_ADD_INTEREST,
     STATE_VIEW_TRANSACTIONS,
     STATE_ADMIN_VIEW_ALL_TRANSACTIONS,
     STATE_TRANSFER,
@@ -75,9 +77,6 @@ private:
     sf::Text titleText;
     sf::Text displayText;
     sf::RectangleShape atmBody;
-    sf::RectangleShape screen;
-    sf::RectangleShape screenGlow;
-    sf::RectangleShape screenGlass;
     sf::Texture atmFrameTexture;
     sf::Sprite atmFrameSprite;
     bool frameTextureLoaded{ false };
@@ -96,8 +95,7 @@ private:
     enum AdminActionMode {
         ADMIN_ACTION_NONE,
         ADMIN_ACTION_RESET_PIN,
-        ADMIN_ACTION_LOCK_CARD,
-        ADMIN_ACTION_UNLOCK_CARD
+        ADMIN_ACTION_LOCK_CARD
     };
     AdminActionMode adminActionMode;
 
@@ -126,6 +124,8 @@ private:
     void drawAdminMenu();
     void drawAdminViewAccounts();
     void drawAdminSelectAccount();
+    void drawAdminPendingDeposits();
+    void drawAdminAddInterestScreen();
     void drawViewTransactionsScreen();
     void drawAdminViewAllTransactionsScreen();
     void drawTransferScreen();

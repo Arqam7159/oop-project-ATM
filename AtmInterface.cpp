@@ -3,6 +3,8 @@
 #include <iomanip>
 #include <iostream>
 #include <cctype>
+#include <chrono>
+#include <ctime>
 
 using namespace std;
 
@@ -24,6 +26,20 @@ static bool isValidNumber(const string& str) {
     }
     
     return hasDigit; // Must have at least one digit
+}
+
+static std::string currentTimestamp() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+#if defined(_WIN32) || defined(_WIN64)
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+    return oss.str();
 }
 
 ATMInterface::ATMInterface()
@@ -58,7 +74,6 @@ ATMInterface::ATMInterface()
         );
     }
     
-    atmMachine.refillCash(500000.0); // ensure ample cash to avoid dispense failures
     setupUI();
 }
 
@@ -70,20 +85,6 @@ void ATMInterface::setupUI() {
     atmBody.setFillColor(sf::Color(20, 24, 30));
     atmBody.setOutlineThickness(5);
     atmBody.setOutlineColor(sf::Color(70, 90, 120));
-    
-    screenGlow.setSize(sf::Vector2f(700, 440));
-    screenGlow.setPosition(100, 90);
-    screenGlow.setFillColor(sf::Color(0, 0, 0, 0)); // no extra tint by default
-    
-    screen.setSize(sf::Vector2f(680, 420));
-    screen.setPosition(110, 100);
-    screen.setFillColor(sf::Color(12, 16, 24, 238));
-    screen.setOutlineThickness(3);
-    screen.setOutlineColor(sf::Color(90, 130, 180));
-
-    screenGlass.setSize(sf::Vector2f(672, 412));
-    screenGlass.setPosition(114, 104);
-    screenGlass.setFillColor(sf::Color(200, 220, 230, 18));
     
     titleText.setFont(mainFont);
     titleText.setCharacterSize(30);
@@ -148,7 +149,8 @@ void ATMInterface::handleEvents() {
                 currentState == STATE_WITHDRAW || currentState == STATE_DEPOSIT || 
                 currentState == STATE_ADMIN_LOGIN || currentState == STATE_TRANSFER ||
                 currentState == STATE_TRANSFER_AMOUNT || currentState == STATE_CHANGE_PIN_CURRENT ||
-                currentState == STATE_CHANGE_PIN_NEW || currentState == STATE_CHANGE_PIN_CONFIRM) {
+                currentState == STATE_CHANGE_PIN_NEW || currentState == STATE_CHANGE_PIN_CONFIRM ||
+                currentState == STATE_ADMIN_ADD_INTEREST) {
                 handleTextInput(event.text.unicode);
             }
         }
@@ -242,12 +244,20 @@ void ATMInterface::handleTextInput(sf::Uint32 unicode) {
         } else if (currentState == STATE_CHANGE_PIN_CONFIRM) {
             processPinChange();
         }
+    } else if (unicode == '.' && (currentState == STATE_WITHDRAW || currentState == STATE_DEPOSIT ||
+                                  currentState == STATE_TRANSFER || currentState == STATE_TRANSFER_AMOUNT ||
+                                  currentState == STATE_ADMIN_ADD_INTEREST)) {
+        // Allow one decimal point in numeric entry states
+        if (currentInput.find('.') == string::npos && currentInput.length() < 30) {
+            currentInput += static_cast<char>(unicode);
+        }
     } else if (unicode >= 48 && unicode <= 57) { // Numbers 0-9
         bool isPinState = (currentState == STATE_ENTER_PIN || currentState == STATE_LOGIN || 
                            currentState == STATE_CHANGE_PIN_CURRENT || currentState == STATE_CHANGE_PIN_NEW ||
                            currentState == STATE_CHANGE_PIN_CONFIRM);
         bool isAmountState = (currentState == STATE_WITHDRAW || currentState == STATE_DEPOSIT ||
-                              currentState == STATE_TRANSFER || currentState == STATE_TRANSFER_AMOUNT);
+                              currentState == STATE_TRANSFER || currentState == STATE_TRANSFER_AMOUNT ||
+                              currentState == STATE_ADMIN_ADD_INTEREST);
 
         if (currentState == STATE_CARD_INPUT && currentInput.length() < 7) {
             currentInput += static_cast<char>(unicode);
@@ -357,6 +367,12 @@ void ATMInterface::render() {
             break;
         case STATE_ADMIN_VIEW_LOCKED_CARDS:
             drawViewLockedCardsScreen();
+            break;
+        case STATE_ADMIN_PENDING_DEPOSITS:
+            drawAdminPendingDeposits();
+            break;
+        case STATE_ADMIN_ADD_INTEREST:
+            drawAdminAddInterestScreen();
             break;
         case STATE_CHANGE_PIN_CURRENT:
             drawChangePinCurrentScreen();
@@ -513,6 +529,20 @@ void ATMInterface::processDeposit(const string& amountStr) {
         double amount = stod(amountStr);
         
         if (currentAccount && amount > 0) {
+            if (amount > 7500.0) {
+                std::string reqId = bank.addPendingDeposit(currentAccount->getAccountNumber(), amount, currentTimestamp());
+                atmMachine.acceptCash(amount);
+
+                stringstream ss;
+                ss << "Deposit of $" << fixed << setprecision(2) << amount
+                   << " submitted.\nAwaiting admin approval.\nRequest ID: " << reqId;
+                transactionMessage = ss.str();
+                currentInput.clear();
+                previousMenuState = STATE_MAIN_MENU;
+                setScreen(STATE_TRANSACTION_COMPLETE);
+                return;
+            }
+
             currentAccount->deposit(amount);
             atmMachine.acceptCash(amount);
             bank.updateAccountData();
@@ -1055,7 +1085,7 @@ void ATMInterface::drawAdminLoginScreen() {
     inputText.setPosition(350, 350);
     window.draw(inputText);
     
-    screenButtons.emplace_back("Login", mainFont, sf::Vector2f(180, 50), sf::Vector2f(200, 450));
+    screenButtons.emplace_back("Login", mainFont, sf::Vector2f(180, 50), sf::Vector2f(200, 400));
     screenButtons.back().setAction([this]() {
         if (admin.login("admin", currentInput)) {
             currentInput.clear();
@@ -1066,7 +1096,7 @@ void ATMInterface::drawAdminLoginScreen() {
         }
     });
     
-    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 450));
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(180, 50), sf::Vector2f(430, 400));
     screenButtons.back().setAction([this]() {
         currentInput.clear();
         setScreen(STATE_WELCOME);
@@ -1080,12 +1110,12 @@ void ATMInterface::drawAdminMenu() {
     displayText.setCharacterSize(28);
     displayText.setFillColor(sf::Color::Cyan);
     displayText.setString("Admin Panel");
-    displayText.setPosition(340, 120);
+    displayText.setPosition(300, 120);
     window.draw(displayText);
     
-    float col1X = 120, col2X = 360, col3X = 600;
-    float row1Y = 220, row2Y = 320, row3Y = 420;
-    float btnWidth = 180, btnHeight = 50;
+    float col1X = 150, col2X = 330, col3X = 510;
+    float row1Y = 220, row2Y = 300, row3Y = 380;
+    float btnWidth = 160, btnHeight = 48;
     
     // Row 1
     screenButtons.emplace_back("View Accounts", mainFont, sf::Vector2f(btnWidth, btnHeight), sf::Vector2f(col1X, row1Y));
@@ -1103,11 +1133,8 @@ void ATMInterface::drawAdminMenu() {
 
     screenButtons.emplace_back("Add Interest", mainFont, sf::Vector2f(btnWidth, btnHeight), sf::Vector2f(col3X, row1Y));
     screenButtons.back().setAction([this]() {
-        admin.addInterest(bank, 0.015);
-        bank.updateAccountData();
-        transactionMessage = "Interest added to all savings accounts!\nCheck 'View All Accounts' to see updated balances.";
-        previousMenuState = STATE_ADMIN_MENU;
-        setScreen(STATE_TRANSACTION_COMPLETE);
+        currentInput.clear();
+        setScreen(STATE_ADMIN_ADD_INTEREST);
     });
     
     // Row 2
@@ -1120,11 +1147,6 @@ void ATMInterface::drawAdminMenu() {
     screenButtons.back().setAction([this]() {
         startAdminAccountAction(ADMIN_ACTION_LOCK_CARD);
     });
-
-    screenButtons.emplace_back("Unlock Card", mainFont, sf::Vector2f(btnWidth, btnHeight), sf::Vector2f(col3X, row2Y));
-    screenButtons.back().setAction([this]() {
-        startAdminAccountAction(ADMIN_ACTION_UNLOCK_CARD);
-    });
     
     // Row 3
     screenButtons.emplace_back("View Locked Cards", mainFont, sf::Vector2f(btnWidth, btnHeight), sf::Vector2f(col1X, row3Y));
@@ -1132,8 +1154,14 @@ void ATMInterface::drawAdminMenu() {
         scrollOffset = 0;
         setScreen(STATE_ADMIN_VIEW_LOCKED_CARDS);
     });
+
+    screenButtons.emplace_back("Approve Deposits", mainFont, sf::Vector2f(btnWidth, btnHeight), sf::Vector2f(col2X, row3Y));
+    screenButtons.back().setAction([this]() {
+        scrollOffset = 0;
+        setScreen(STATE_ADMIN_PENDING_DEPOSITS);
+    });
     
-    screenButtons.emplace_back("Logout", mainFont, sf::Vector2f(btnWidth, btnHeight), sf::Vector2f(col2X, row3Y));
+    screenButtons.emplace_back("Logout", mainFont, sf::Vector2f(btnWidth, btnHeight), sf::Vector2f(col3X, row3Y));
     screenButtons.back().setAction([this]() {
         setScreen(STATE_WELCOME);
     });
@@ -1146,7 +1174,7 @@ void ATMInterface::drawAdminViewAccounts() {
     displayText.setCharacterSize(20);
     displayText.setFillColor(sf::Color::Cyan);
     displayText.setString("All Bank Accounts (Scroll with mouse wheel)");
-    displayText.setPosition(200, 130);
+    displayText.setPosition(180, 130);
     window.draw(displayText);
     
     auto& accounts = bank.getAllAccounts();
@@ -1188,9 +1216,9 @@ void ATMInterface::drawAdminSelectAccount() {
     window.draw(displayText);
     
     auto& accounts = bank.getAllAccounts();
-    float col1X = 110, col2X = 370, col3X = 630;
-    float row1Y = 200, row2Y = 270;
-    float btnWidth = 180, btnHeight = 45;
+    float col1X = 170, col2X = 340, col3X = 510;
+    float row1Y = 210, row2Y = 280;
+    float btnWidth = 150, btnHeight = 45;
     int count = 0;
     
     for (auto const& [key, accPtr] : accounts) {
@@ -1230,15 +1258,6 @@ void ATMInterface::drawAdminSelectAccount() {
                             transactionMessage = "Unable to lock account:\n" + accNum;
                         }
                         break;
-                    case ADMIN_ACTION_UNLOCK_CARD:
-                        if (!bank.isAccountLocked(accNum)) {
-                            transactionMessage = "Account already unlocked:\n" + accNum;
-                        } else if (bank.setAccountLock(accNum, false)) {
-                            transactionMessage = "Account unlocked successfully:\n" + accNum;
-                        } else {
-                            transactionMessage = "Unable to unlock account:\n" + accNum;
-                        }
-                        break;
                     default:
                         transactionMessage = "No admin action selected.";
                         break;
@@ -1256,6 +1275,168 @@ void ATMInterface::drawAdminSelectAccount() {
         adminActionMode = ADMIN_ACTION_NONE;
         setScreen(STATE_ADMIN_MENU); 
     });
+}
+
+void ATMInterface::drawAdminAddInterestScreen() {
+    screenButtons.clear();
+
+    displayText.setFont(mainFont);
+    displayText.setCharacterSize(24);
+    displayText.setFillColor(sf::Color::Cyan);
+    displayText.setString("Add Interest to Savings Accounts");
+    displayText.setPosition(140, 140);
+    window.draw(displayText);
+
+    displayText.setCharacterSize(18);
+    displayText.setFillColor(sf::Color::White);
+    displayText.setString("Enter interest percentage then pick a Savings account:");
+    displayText.setPosition(120, 200);
+    window.draw(displayText);
+
+    sf::Text inputText;
+    inputText.setFont(mainFont);
+    inputText.setCharacterSize(32);
+    inputText.setFillColor(sf::Color::Yellow);
+    inputText.setString(currentInput + "%");
+    inputText.setPosition(300, 240);
+    window.draw(inputText);
+
+    std::vector<std::shared_ptr<Account>> savings;
+    for (auto const& [key, accPtr] : bank.getAllAccounts()) {
+        if (accPtr && accPtr->displayAccountType() == "Savings Account") {
+            savings.push_back(accPtr);
+        }
+    }
+
+    if (savings.empty()) {
+        displayText.setCharacterSize(20);
+        displayText.setFillColor(sf::Color::Yellow);
+        displayText.setString("No savings accounts found.");
+        displayText.setPosition(250, 320);
+        window.draw(displayText);
+    } else {
+        float col1X = 150, col2X = 340, col3X = 530;
+        float row1Y = 320, row2Y = 390;
+        float btnWidth = 160, btnHeight = 45;
+        for (size_t i = 0; i < savings.size() && i < 6; ++i) {
+            float xPos = (i % 3 == 0) ? col1X : (i % 3 == 1) ? col2X : col3X;
+            float yPos = (i < 3) ? row1Y : row2Y;
+            std::string label = savings[i]->getAccountNumber().substr(0, 7);
+            screenButtons.emplace_back(label, mainFont, sf::Vector2f(btnWidth, btnHeight), sf::Vector2f(xPos, yPos));
+            std::string accNum = savings[i]->getAccountNumber();
+            screenButtons.back().setAction([this, accNum]() {
+                if (currentInput.empty() || !isValidNumber(currentInput)) {
+                    transactionMessage = "Enter a valid percentage.";
+                    previousMenuState = STATE_ADMIN_MENU;
+                    setScreen(STATE_TRANSACTION_COMPLETE);
+                    return;
+                }
+                double percent = stod(currentInput);
+                if (percent <= 0) {
+                    transactionMessage = "Percentage must be greater than 0.";
+                    previousMenuState = STATE_ADMIN_MENU;
+                    setScreen(STATE_TRANSACTION_COMPLETE);
+                    return;
+                }
+                double rate = percent / 100.0;
+                auto acc = bank.getAccount(accNum);
+                if (acc && acc->displayAccountType() == "Savings Account") {
+                    acc->applyInterest(rate);
+                    bank.updateAccountData();
+                    stringstream ss;
+                    ss << "Added " << fixed << setprecision(2) << percent << "% interest\n"
+                       << "to savings account " << accNum;
+                    transactionMessage = ss.str();
+                } else {
+                    transactionMessage = "Account not found or not Savings.";
+                }
+                currentInput.clear();
+                previousMenuState = STATE_ADMIN_MENU;
+                setScreen(STATE_TRANSACTION_COMPLETE);
+            });
+        }
+    }
+
+    screenButtons.emplace_back("Cancel", mainFont, sf::Vector2f(160, 45), sf::Vector2f(320, 470));
+    screenButtons.back().setAction([this]() {
+        currentInput.clear();
+        setScreen(STATE_ADMIN_MENU);
+    });
+}
+
+void ATMInterface::drawAdminPendingDeposits() {
+    screenButtons.clear();
+
+    displayText.setFont(mainFont);
+    displayText.setCharacterSize(26);
+    displayText.setFillColor(sf::Color::Cyan);
+    displayText.setString("Pending Deposit Requests");
+    displayText.setPosition(200, 120);
+    window.draw(displayText);
+
+    const auto& pending = bank.getPendingDeposits();
+    if (pending.empty()) {
+        displayText.setCharacterSize(20);
+        displayText.setFillColor(sf::Color::White);
+        displayText.setString("No pending deposits found.");
+        displayText.setPosition(260, 250);
+        window.draw(displayText);
+    } else {
+        int yPos = 170;
+        int shown = 0;
+        const int maxShow = 5;
+        for (const auto& pd : pending) {
+            if (shown >= maxShow) break;
+            sf::Text row;
+            row.setFont(mainFont);
+            row.setCharacterSize(16);
+            row.setFillColor(sf::Color::White);
+
+            stringstream ss;
+            ss << pd.id << " | Acc: " << pd.accountNumber
+               << " | Amount: $" << fixed << setprecision(2) << pd.amount
+               << " | " << pd.timestamp;
+            row.setString(ss.str());
+            row.setPosition(80, yPos);
+            window.draw(row);
+
+            screenButtons.emplace_back("Approve", mainFont, sf::Vector2f(120, 40), sf::Vector2f(620, yPos - 5));
+            std::string reqId = pd.id;
+            screenButtons.back().setAction([this, reqId]() {
+                Bank::PendingDeposit pdOut;
+                if (bank.takePendingDeposit(reqId, pdOut)) {
+                    auto acc = bank.getAccount(pdOut.accountNumber);
+                    if (acc) {
+                        acc->deposit(pdOut.amount);
+                        bank.updateAccountData();
+                        auto trans = make_shared<DepositTransaction>(
+                            atmMachine.generateTransactionID(),
+                            pdOut.accountNumber,
+                            pdOut.amount
+                        );
+                        acc->addTransaction(trans);
+                        TransactionLog::logTransaction(trans, "DEPOSIT");
+                        stringstream ss;
+                        ss << "Approved deposit $" << fixed << setprecision(2) << pdOut.amount
+                           << " for account " << pdOut.accountNumber;
+                        transactionMessage = ss.str();
+                    } else {
+                        transactionMessage = "Account not found for pending request.";
+                    }
+                } else {
+                    transactionMessage = "Pending request not found.";
+                }
+                previousMenuState = STATE_ADMIN_MENU;
+                setScreen(STATE_TRANSACTION_COMPLETE);
+            });
+
+            yPos += 70;
+            shown++;
+        }
+    }
+
+    screenButtons.emplace_back("Back", mainFont, sf::Vector2f(160, 45), sf::Vector2f(340, 470));
+    screenButtons.back().setAction([this]() { setScreen(STATE_ADMIN_MENU); });
 }
 
 void ATMInterface::drawViewTransactionsScreen() {
@@ -1560,7 +1741,7 @@ void ATMInterface::drawViewLockedCardsScreen() {
             
             // Add unlock button for this card
             screenButtons.emplace_back("Unlock", mainFont, sf::Vector2f(100, 35), 
-                                      sf::Vector2f(700, yPos - 5));
+                                      sf::Vector2f(600, yPos - 5));
             string cardNum = lockedAccounts[i]->getAccountNumber();
             screenButtons.back().setAction([this, cardNum]() {
                 admin.unlockCard(bank, cardNum);
@@ -1853,8 +2034,6 @@ string ATMInterface::getAdminActionLabel() const {
             return "Select Account to Reset PIN:";
         case ADMIN_ACTION_LOCK_CARD:
             return "Select Account to Lock Card:";
-        case ADMIN_ACTION_UNLOCK_CARD:
-            return "Select Account to Unlock Card:";
         default:
             return "Select Account:";
     }
