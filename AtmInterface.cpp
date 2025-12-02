@@ -8,7 +8,7 @@
 
 using namespace std;
 
-// Helper function to check if a string is a valid number
+//check if a string is a valid number
 static bool isValidNumber(const string& str) {
     if (str.empty()) return false;
     
@@ -27,7 +27,7 @@ static bool isValidNumber(const string& str) {
     
     return hasDigit; // Must have at least one digit
 }
-
+//shows just the timestamp in the receipts
 static std::string currentTimestamp() {
     auto now = std::chrono::system_clock::now();
     std::time_t t = std::chrono::system_clock::to_time_t(now);
@@ -181,6 +181,8 @@ void ATMInterface::handleMouseClick(sf::Vector2f mousePos) {
     }
 }
 
+//simple if-else block for functioanlities
+
 void ATMInterface::handleTextInput(sf::Uint32 unicode) {
     if (unicode == 8) { // Backspace
         if (!currentInput.empty()) {
@@ -274,6 +276,7 @@ void ATMInterface::handleTextInput(sf::Uint32 unicode) {
         }
     }
 }
+
 
 void ATMInterface::render() {
     window.clear(sf::Color::Black);
@@ -392,6 +395,7 @@ void ATMInterface::render() {
     window.display();
 }
 
+//using make_unique for distinct cards
 void ATMInterface::checkCardNumber() {
     if (currentInput.length() != 7) {
         transactionMessage = "Invalid card number! Must be exactly 7 digits.";
@@ -433,6 +437,7 @@ void ATMInterface::createNewAccount() {
         setScreen(STATE_WELCOME);
     }
 }
+
 
 void ATMInterface::enterPIN(const string& pin) {
     if (currentCard) {
@@ -482,6 +487,7 @@ void ATMInterface::enterPIN(const string& pin) {
     }
 }
 
+
 void ATMInterface::processWithdrawal(const string& amountStr) {
     if (isValidNumber(amountStr)) {
         double amount = stod(amountStr);
@@ -500,6 +506,7 @@ void ATMInterface::processWithdrawal(const string& amountStr) {
                 TransactionLog::logTransaction(trans, "WITHDRAWAL");
                 
                 stringstream ss;
+                //trans here is sending this withdrawl to transactionlog.h to store the transaction in printreceipt
                 ss << "Withdrawal Successful!\n\n";
                 ss << trans->printReceipt();
                 ss << "\nRemaining Balance: $" << fixed << setprecision(2) 
@@ -507,7 +514,7 @@ void ATMInterface::processWithdrawal(const string& amountStr) {
                 
                 transactionMessage = ss.str();
                 currentInput.clear();
-                setScreen(STATE_TRANSACTION_COMPLETE);
+                setScreen(STATE_caCOMPLETE);
             } else {
                 transactionMessage = "Insufficient funds!";
                 currentInput.clear();
@@ -555,6 +562,7 @@ void ATMInterface::processDeposit(const string& amountStr) {
             currentAccount->addTransaction(trans);
             TransactionLog::logTransaction(trans, "DEPOSIT");
             
+            //similar to withdrawl, store in transactionlog.h and print
             stringstream ss;
             ss << "Deposit Successful!\n\n";
             ss << trans->printReceipt();
@@ -1300,6 +1308,8 @@ void ATMInterface::drawAdminAddInterestScreen() {
     inputText.setString(currentInput + "%");
     inputText.setPosition(300, 240);
     window.draw(inputText);
+
+    //using shared pointer so we dont have to manually dealloacate 
 
     std::vector<std::shared_ptr<Account>> savings;
     for (auto const& [key, accPtr] : bank.getAllAccounts()) {
