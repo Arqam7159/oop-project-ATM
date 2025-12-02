@@ -31,6 +31,18 @@ g++ -std=c++17 main.cpp AtmInterface.cpp -I. \
   -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio -o atm_simulator
 ```
 
+### Windows (MSYS2 MinGW)
+1) Install MSYS2, then in the MSYS2 MinGW64 shell:
+```bash
+pacman -S --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-sfml
+```
+2) Build:
+```bash
+g++ -std=c++17 main.cpp AtmInterface.cpp -I. \
+  -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio -o atm_simulator.exe
+```
+3) Ensure the SFML `bin` directory is on `PATH` (or copy the SFML `.dll` files next to `atm_simulator.exe`), then run `./atm_simulator.exe` from the same directory as `assets/`.
+
 ### Using CMake
 ```bash
 cmake -B build
